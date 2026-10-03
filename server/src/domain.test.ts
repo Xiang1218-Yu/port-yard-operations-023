@@ -22,3 +22,23 @@ test('appointment and task domain operations support create, update and delete',
   assert.equal(updateYardTask(task.id, { to: '北闸口' })?.to, '北闸口');
   assert.equal(deleteYardTask(task.id)?.id, task.id);
 });
+
+test('container detail aggregates voyage, appointment, plan and prioritized task sequence', async () => {
+  const { containerDetail, createYardTask, deleteYardTask } = await import('./domain.js');
+  const low = createYardTask({ kind: 'rehandle', containerId: 'FCIU-9920310', from: 'C03-R04-T2', to: 'C03-R05-T1', priority: 10, scheduledAt: new Date().toISOString(), estimatedMinutes: 10 });
+  const high = createYardTask({ kind: 'deliver', containerId: 'FCIU-9920310', from: 'C03-R04-T2', to: '南闸口', priority: 90, scheduledAt: new Date().toISOString(), estimatedMinutes: 15 });
+  const detail = containerDetail('FCIU-9920310');
+  assert.ok(detail);
+  assert.equal(detail.container.id, 'FCIU-9920310');
+  assert.equal(detail.voyage?.id, 'VOY-QF2');
+  assert.equal(detail.appointment?.id, 'APT-9004');
+  assert.ok(detail.plan?.recommendedBlock);
+  const ids = detail.tasks.map(task => task.id);
+  assert.ok(ids.includes('TASK-104'));
+  const deliverIndex = detail.tasks.findIndex(task => task.id === high.id && task.kind === 'deliver');
+  const rehandleIndex = detail.tasks.findIndex(task => task.id === low.id && task.kind === 'rehandle');
+  assert.ok(deliverIndex > -1 && rehandleIndex > -1 && deliverIndex < rehandleIndex);
+  for (let index = 1; index < detail.tasks.length; index++) assert.ok(detail.tasks[index - 1].score >= detail.tasks[index].score);
+  deleteYardTask(low.id); deleteYardTask(high.id);
+  assert.equal(containerDetail('NO-SUCH-BOX'), undefined);
+});
